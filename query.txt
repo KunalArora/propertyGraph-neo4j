@@ -1,0 +1,48 @@
+----Query-1
+MATCH (a:author)-[rw:wrote]->(p:paper)<-[rc:has_citation]-(c:paper)
+WITH a.authorName as authorName, p.title as paperName,
+    count(c.title) as nCitation
+ORDER BY authorName, nCitation DESC
+WITH authorName, collect(nCitation) as citation
+UNWIND range(0, size(citation)-1) as position WITH authorName,
+CASE WHEN citation[position] <= (position+1)
+    THEN citation[position]
+    ELSE (position+1)
+END as index
+RETURN authorName, max(index) as hIndex
+
+----Query-2
+MATCH (c:conference)--(p:paper)<--(p2:paper)
+WITH c.name as confName, p.title as paperName,
+     count(p2.title ) as nCitation
+ORDER BY confName, nCitation desc
+WITH confName, collect(paperName) as citation
+return confName, citation[..3] as Top3CitedPapers
+
+----Query-3
+MATCH (c:conference)-[r:edition]->(p:paper)<--(a:author)
+WITH c.name as confName, a.authorName as authorName,
+     count(distinct r.year) as nYear
+WHERE nYear>=4
+RETURN confName, collect(authorName) as authorNames
+
+----Query-4
+MATCH (j:journal)-[r:volume]-()--(a:author)--(p:paper)<-[:has_citation]-(p2:paper)
+WITH j.name as journalName, a.authorName as authorName, r.year as jYear,
+     count(p2.title) as citation
+WHERE jYear in [(date().year-1), (date().year-2)]
+RETURN journalName,  sum(citation)/count(authorName)  as ImpactFactor
+ORDER BY ImpactFactor DESC
+
+----PageRank Algo
+call algo.pageRank.stream('paper', 'has_citation',
+{iterations:20, dampingFactor:0.85})
+YIELD nodeId, score
+RETURN algo.getNodeById(node.Id).title AS page, score
+ORDER BY score DESC
+
+----Louvain Algo
+CALL algo.louvain.stream('paper', 'has_citation', {})
+YIELD nodeId, community
+RETURN algo.getNodeById(nodeId).title AS user, community
+ORDER BY community;
